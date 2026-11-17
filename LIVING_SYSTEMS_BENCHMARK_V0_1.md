@@ -71,7 +71,7 @@ Symthaea's HDC/CfC, FEP, and candidate integration measures may be tested as pre
 | Layer | Responsibility | Required evidence |
 |---|---|---|
 | Symtropy physics | Spatial dynamics, contacts, transport, deterministic stepping and replay | Solver tests, invariants, replay receipts, matched performance measurements |
-| Symtropy living-world model | Typed stocks/flows, resource fields, habitats, disturbances, population dynamics | Balance residuals, process tests, reference trajectories |
+| Symtropy living-world model | Reuse CIVDYN's shared resource ledger and causal-path substrate; add ecology-specific process models and empirical adapters | Balance residuals, process tests, observation-backed trajectories |
 | Symthaea | State estimation, prediction, hypothesis generation, policy proposals, uncertainty and abstention | Held-out forecast scores, calibration, ablations, decision evaluations |
 | Independent evaluator (SAM / benchmark harness) | Frozen inputs, intervention execution, scoring, invariant checks, evidence manifest | Reproducible report, exact commit/config/data identities |
 | Mycelix (later integration) | Provenance, authority, consent and cross-operator evidence exchange | Signed provenance and policy checks; never self-authorization of physical actions |
@@ -258,71 +258,76 @@ Each result should carry a machine-readable manifest with: repository URL, full 
 
 A queued or skipped CI job is not a pass. Local execution evidence and runner status are separate fields.
 
-## 9. Proposed typed metabolism model
+## 9. Reuse shared stock-flow and causal infrastructure; add the missing ecology layer
 
-Before adding more agent behaviours, implement an explicit stock-and-flow layer.
+**Do not build a second general-purpose ledger or a second civilization simulator.** The main Symtropy repository already has an active foundation:
 
-Minimum conceptual types (names are provisional):
+- [CIVDYN-001 issue #3390](https://github.com/Luminous-Dynamics/symtropy/issues/3390) defines the bounded socio-ecological dynamics programme.
+- [Resource-ledger draft PR #3391](https://github.com/Luminous-Dynamics/symtropy/pull/3391) provides a deterministic water/energy/food stock-flow kernel, dimensional conservation checks, service coverage, and a synthetic two-region shock fixture.
+- [Causal-path draft PR #3803](https://github.com/Luminous-Dynamics/symtropy/pull/3803) reuses that ledger as the sole physical stock-flow authority and qualifies matched intervention → mechanism → independently measured outcome paths. Its reported exact-head pass is limited to the deterministic software fixture, not real-world causal identification.
+- [Civilizational Systems Science issue #10076](https://github.com/Luminous-Dynamics/symthaea/issues/10076) and [interchange proposal](https://github.com/Luminous-Dynamics/symthaea/blob/research/civbench-social-learning-core-2026-11/research/civbench-social-learning-core/CIVILIZATIONAL_SYSTEMS_SCIENCE_INTERCHANGE_V0_1.md) define the cross-project evidence and model-run semantics.
 
-- `StockId`: a named compartment stock (water, carbon, nitrogen, phosphorus, stored energy, biomass, pollutant).
-- `FlowId`: a transfer or transformation with source, destination, amount, units, and time.
-- `BoundaryFlux`: import or export crossing the declared system boundary.
-- `Transformation`: a stoichiometric conversion between stocks (e.g. substrate to biomass + residuals + heat).
-- `LedgerSnapshot`: opening stocks, flows, closing stocks, and residuals.
-- `MetabolismGraph`: compartments and permitted transfers.
-- `ViabilityEnvelope`: hard limits, target bands, and recovery criteria.
-- `Disturbance`: typed, seeded intervention with an explicit schedule and magnitude.
+LSB's distinct contribution is **ecological process fidelity, empirical ecological observations, disturbance/recovery evaluation, and ecology-specific decision quality**. It should consume the CIVDYN ledger and causal receipts through a versioned interface. Any required generalization of the ledger belongs in the shared Symtropy owner, not as a fork in this repository.
+
+Minimum ecology-specific state/process concepts (names provisional):
+
+- `EcologicalCompartment`: soil water, soil organic carbon, mineral nitrogen/phosphorus, living biomass by functional group, detritus, habitat extent/quality.
+- `EcologicalProcess`: primary production, nutrient uptake, mortality, grazing/predation, decomposition/mineralization, dispersal/colonization, evapotranspiration, and disturbance response.
+- `ProcessFlux`: amount, unit, interval, source/destination compartments, and process/model identity.
+- `EcologicalObservation`: measured target, method, spatial/temporal support, uncertainty, provenance, and missingness state.
+- `ViabilityEnvelope`: separate ecological and infrastructure thresholds, target bands, and recovery criteria.
+- `Disturbance`: typed, seeded intervention with explicit schedule, magnitude, duration, and affected compartments.
 
 Design constraints:
 
-1. Units and dimensions are explicit; energy, mass, volume, count, and rates cannot be mixed silently.
-2. Internal transfer is represented once and cancels in the whole-system balance.
-3. Regeneration MUST identify its external source or transformation pathway.
-4. Every flow must be finite and non-negative unless a signed-flow representation is explicitly specified.
-5. Invalid units, missing source/destination, overflow, NaN, and undeclared sinks fail closed.
-6. Stock bounds and transformations are checked at each tick in debug/qualification modes.
-7. Snapshots support deterministic replay and independent recomputation of the balance.
+1. Keep water, energy, carbon, nitrogen, phosphorus, biomass and area in dimensionally distinct quantities. Do not create a cross-unit aggregate residual.
+2. Every ecological source/sink must be declared at the model boundary; photosynthesis, fixation, deposition, harvesting, respiration, export, and leaching are not interchangeable generic regeneration.
+3. Internal transformations must conserve each applicable element even where energy is dissipated or chemical form changes.
+4. Biodiversity/function indicators are observation or model outputs, not resource stocks unless they have an explicit physical representation.
+5. The ecological adapter MUST NOT recalculate or override balances already owned by CIVDYN; it submits typed flows and consumes receipts.
+6. Invalid units, missing process endpoints, overflow, NaN, and undeclared sinks fail closed.
+7. Symthaea may encode observations and propose hypotheses, but lossless typed observations remain available to independent scoring.
 
-This is deliberately independent of Phi. It provides a generic physical substrate that Symthaea may observe and reason over.
+This layer is deliberately independent of Phi. HDC/CfC/FEP may be compared as candidate inference or control methods, not as privileged definitions of ecological health.
 
 ## 10. Immediate implementation sequence
 
-### Slice 1 — accounting correctness (first code increment)
+### Slice 1 — ecological process conformance (first code increment)
 
-1. Add typed stock/flow/boundary records in a new module without breaking the existing public API.
-2. Add tests for internal transfer cancellation, import/export accounting, stoichiometric conversion, depletion, regeneration provenance, invalid values, and replay.
-3. Add a small deterministic two-compartment example with known closed-form balances.
-4. Add a report that emits per-tick and cumulative balance residuals.
-5. Run focused local tests; record exact command, exit code, commit SHA, and any unrun verification.
+1. Read and reuse the CIVDYN resource-ledger interface and the shared model-run/claim contract; do not fork generic stock, transfer, or conservation semantics.
+2. Specify a small ecological compartment/process profile with explicit units, system boundary, process sources/sinks, and observation targets.
+3. Add one analytically checkable synthetic process fixture (for example, detritus decomposition and plant nutrient uptake) whose carbon/nutrient/water balances can be independently recomputed.
+4. Add ecology-specific process/receipt tests for valid transformations, unit mismatch, unaccounted loss, boundary flux, and deterministic replay.
+5. Publish raw trajectories and per-compartment residuals. State clearly which generic balances are evaluated by CIVDYN and which ecological processes are evaluated by LSB.
 
-### Slice 2 — causal resource benchmark
+### Slice 2 — empirical ecological benchmark
 
-1. Factor the existing LSB-00 resource-well setup into a shared harness.
-2. Add paired-seed execution and machine-readable per-run output.
-3. Reproduce WELL_ONLY / GREEDY / RANDOM / FEP conditions with resonance on/off.
-4. Add actual exchange versus passive proximity as a separate manipulation.
-5. Add effect sizes, confidence intervals, and corrected comparisons.
+1. Select one small, permissively reusable ecological dataset and freeze data version, observation scope, preprocessing and blind split.
+2. Reproduce persistence, seasonal climatology, and a conventional process/statistical baseline before Symthaea.
+3. Use CRPS or another suitable proper score for probabilistic forecasts, plus calibration, coverage, interval width and horizon-wise skill.
+4. Compare against relevant ILAMB-style observation confrontations; do not treat an agent-based synthetic fixture as empirical validation.
+5. Respect data-use, citation, and custodianship conditions for Jena/NEON and any community-held data.
 
-### Slice 3 — resilience benchmark
+### Slice 3 — causal ecological intervention and resilience
 
-1. Add seasonal, migrating, depletion, and shock disturbances as typed schedules.
-2. Add viability envelopes and recovery metrics.
-3. Compare no-op, fixed-rule, greedy, and model-based controllers.
-4. Evaluate blind disturbance schedules and held-out seeds.
+1. Reuse CIVDYN's matched causal-path receipt semantics rather than defining a second causal graph protocol.
+2. Add ecological treatment/control/negative-control arms for disturbance, restoration, resource removal, and recovery interventions.
+3. Track viability, function, recovery time, external input, biodiversity/functional-group response, and uncertainty separately.
+4. Compare no-op, fixed-rule, greedy, conventional model-predictive, robust policy, and Symthaea proposal policies under common initial conditions.
+5. Evaluate on blind disturbance schedules and held-out sites/seasons.
 
-### Slice 4 — empirical bridge
+### Slice 4 — cross-project integration
 
-1. Select one small, permissively reusable public ecological dataset.
-2. Preserve source attribution and exact preprocessing.
-3. Implement persistence, seasonal, and conventional process/statistical baselines.
-4. Evaluate probabilistic forecasts and calibration before any closed-loop claim.
-5. Treat Jena/NEON as candidate adapters after dataset permissions and target definitions are verified.
+1. Map Symthaea biological/ecological primitives to explicit typed observation and process contracts; do not treat a vocabulary embedding as a calibrated ecological state estimate.
+2. Consume CIVDYN model-run and intervention receipts.
+3. Use Mycelix for rights/provenance and Sol-Atlas for spatial-temporal visualization without creating duplicate state ownership.
+4. Preserve fail-closed authority, unknown/stale/out-of-domain states, and independent safety checks.
 
 ## 11. Current gaps and claim boundaries
 
-Inspection of the current repository shows a useful persistent per-agent `EnergyBudget`, multiple controller/null-model experiments, and a revised thesis. That is not yet a complete ecological metabolism model.
+Inspection of the current companion repository shows a useful persistent per-agent `EnergyBudget`, multiple controller/null-model experiments, and a revised thesis. The main Symtropy repository separately has a draft generic resource-ledger implementation (PR #3391) for water, energy and food, plus a draft causal-path conformance crate (PR #3803). These are the correct shared foundations to compose, not duplicate.
 
-The current energy reservoir tracks an entity's internal energy and counters, while regeneration can add energy. A whole-world, boundary-aware ledger for water, carbon, nitrogen, phosphorus, biomass, imports, exports, and transformation products is not established by that per-agent abstraction alone.
+The companion per-agent energy reservoir is not a whole-world ecological model. The current CIVDYN resource vector also does not, by itself, establish calibrated carbon/nitrogen/phosphorus cycling, species/functional-group dynamics, biodiversity observations, habitat processes, or field-validated restoration responses. Those are the distinct LSB gaps.
 
 Consequently, the following are research targets, not achieved capabilities:
 
